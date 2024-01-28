@@ -1,78 +1,66 @@
-import os
 import openai
-from dotenv import load_dotenv
-import time
-import speech_recognition as sr
 import pyttsx3
-import numpy as np
+import speech_recognition as sr
+import time
 
-load_dotenv()
-openai.api_key = os.getenv('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')
-model = 'gpt-3.5-turbo'
-
-r = sr.Recognizer()
+openai.api_key = "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"
 engine = pyttsx3.init()
-voice = engine.getProperty('voices')[1]
-engine.setProperty('voice', voice.id)
-name = "Vedant"
-greetings = [f"whats up master {name}", 
-             "yeah?", 
-             "Well, hello there, Master of Puns and Jokes - how's it going today?",
-             f"Ahoy there, Captain {name}! How's the ship sailing?",
-             f"Bonjour, Monsieur {name}! Comment ça va? Wait, why the hell am I speaking French?" ]
 
 
-def listen_for_wake_word(source):
-    print("Listening for 'Hey POS'...")
+def transcribe_audio_to_text(filename):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(filename) as source:
+        audio = recognizer.record(source)
+    try:
+        return recognizer.recognize_google(audio)
+    except:
+        print('skipping unknown error')
 
+
+def generate_response(prompt):
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        max_tokens=4000,
+        n=1,
+        stop=None,
+        temperature=0.5,
+    )
+    return response["choices"][0]["text"]
+
+
+def speak_text(text):
+    engine.say(text)
+    engine.runAndWait()
+
+
+def main():
     while True:
-        audio = r.listen(source)
-        try:
-            text = r.recognize_google(audio)
-            if "hey pos" in text.lower():
-                print("Wake word detected.")
-                engine.say(np.random.choice(greetings))
-                engine.runAndWait()
-                listen_and_respond(source)
-                break
-        except sr.UnknownValueError:
-            pass
+        print("Say 'Felix' to start ")
+        with sr.Microphone() as source:
+            recognizer = sr.Recognizer()
+            audio = recognizer.listen(source)
+            try:
+                transcription = recognizer.recognize_google(audio)
+                if transcription.lower() == "felix":
+                    filename = "input.wav"
+                    print("Say your question....")
+                    with sr.Microphone() as source:
+                        recognizer = sr.Recognizer()
+                        source.pause_threshold = 1
+                        audio = recognizer.listen(source, phrase_time_limit=None, timeout=None)
+                        with open(filename, "wb") as f:
+                            f.write(audio.get_wav_data())
+
+                    text = transcribe_audio_to_text(filename)
+                    if text:
+                        print(f"You said: {text}")
+                        response = generate_response(text)
+                        print(f"GPT 3 says : {response}")
+                        speak_text(response)
+            except Exception as e:
+                print("An error: {}".format(e))
 
 
-def listen_and_respond(source):
-    print("Listening...")
-
-    while True:
-        audio = r.listen(source)
-        try:
-            text = r.recognize_google(audio)
-            print(f"You said: {text}")
-            if not text:
-                continue
-
-            
-            response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{text}"}]) 
-            response_text = response.choices[0].message.content
-            print(f"OpenAI response: {response_text}")
-
-            
-            engine.say(response_text)
-            engine.runAndWait()
-
-            if not audio:
-                listen_for_wake_word(source)
-        except sr.UnknownValueError:
-            time.sleep(2)
-            print("Silence found, shutting up, listening...")
-            listen_for_wake_word(source)
-            break
-            
-        except sr.RequestError as e:
-            print(f"Could not request results; {e}")
-            engine.say(f"Could not request results; {e}")
-            engine.runAndWait()
-            listen_for_wake_word(source)
-            break
-
-with sr.Microphone() as source:
-    listen_for_wake_word(source)
+if __name__ == "__main__":
+    main()
